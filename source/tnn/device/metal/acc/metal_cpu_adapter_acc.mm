@@ -131,7 +131,8 @@ Status MetalCpuAdapterAcc::Reshape(const std::vector<Blob *> &inputs, const std:
 
 Status MetalCpuAdapterAcc::Forward(const std::vector<Blob *> &inputs, const std::vector<Blob *> &outputs) {
     void* command_queue = nullptr;
-    metal_context_->GetCommandQueue(&command_queue);
+    auto status = metal_context_->GetCommandQueue(&command_queue);
+    RETURN_ON_NEQ(status, TNN_OK);
     
     //convert data from metal to cpu
     for(int i = 0; i < inputs.size(); ++i) {
@@ -143,11 +144,13 @@ Status MetalCpuAdapterAcc::Forward(const std::vector<Blob *> &inputs, const std:
         MatConvertParam param;
         if(DATA_FORMAT_NCHW == cpu_input->GetBlobDesc().data_format) {
             Mat mat(DEVICE_NAIVE, NCHW_FLOAT, cpu_input->GetBlobDesc().dims, cpu_input->GetHandle().base);
-            blob_converter.ConvertToMat(mat, param, command_queue);
+            status = blob_converter.ConvertToMat(mat, param, command_queue);
+            RETURN_ON_NEQ(status, TNN_OK);
         } else {
             //To optimize, use convert to change format
             Mat mat(DEVICE_NAIVE, NCHW_FLOAT, cpu_input->GetBlobDesc().dims);
-            blob_converter.ConvertToMat(mat, param, command_queue);
+            status = blob_converter.ConvertToMat(mat, param, command_queue);
+            RETURN_ON_NEQ(status, TNN_OK);
             float* src_data = reinterpret_cast<float*>(mat.GetData());
             float* dst_data = reinterpret_cast<float*>(cpu_input->GetHandle().base);
             DataFormatConverter::ConvertFromNCHWToNCHW4Float(src_data, dst_data, dims[0], dims[1], dims[2], dims[3]);
@@ -155,10 +158,8 @@ Status MetalCpuAdapterAcc::Forward(const std::vector<Blob *> &inputs, const std:
     }
     
     //cpu acc forword
-    auto status = cpu_adapter_acc_->Forward(cpu_blob_in_, cpu_blob_out_);
-    if (status != TNN_OK) {
-        return status;
-    }
+    status = cpu_adapter_acc_->Forward(cpu_blob_in_, cpu_blob_out_);
+    RETURN_ON_NEQ(status, TNN_OK);
 
     //convert data from cpu to metal
     for(int i = 0; i < outputs.size(); ++i) {

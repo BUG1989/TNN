@@ -134,7 +134,9 @@ Status OpenCLCpuAdapterAcc::Reshape(const std::vector<Blob *> &inputs, const std
 
 Status OpenCLCpuAdapterAcc::Forward(const std::vector<Blob *> &inputs, const std::vector<Blob *> &outputs) {
     void* command_queue = nullptr;
-    ocl_context_->GetCommandQueue(&command_queue);
+    auto status = ocl_context_->GetCommandQueue(&command_queue);
+    RETURN_ON_NEQ(status, TNN_OK);
+
     //convert data from opencl to cpu
     for(int i = 0; i < inputs.size(); ++i) {
         auto device_input = inputs[i];
@@ -144,17 +146,20 @@ Status OpenCLCpuAdapterAcc::Forward(const std::vector<Blob *> &inputs, const std
         MatConvertParam param;
         if(DATA_FORMAT_NCHW == cpu_input->GetBlobDesc().data_format) {
             Mat mat(DEVICE_NAIVE, NCHW_FLOAT, cpu_input->GetBlobDesc().dims, cpu_input->GetHandle().base);
-            blob_converter.ConvertToMat(mat, param, command_queue);
+            status = blob_converter.ConvertToMat(mat, param, command_queue);
+            RETURN_ON_NEQ(status, TNN_OK);
         } else {
             Mat mat(DEVICE_NAIVE, NCHW_FLOAT, cpu_input->GetBlobDesc().dims);
-            blob_converter.ConvertToMat(mat, param, command_queue);
+            status = blob_converter.ConvertToMat(mat, param, command_queue);
+            RETURN_ON_NEQ(status, TNN_OK);
             float* src_data = reinterpret_cast<float*>(mat.GetData());
             float* dst_data = reinterpret_cast<float*>(cpu_input->GetHandle().base);
             DataFormatConverter::ConvertFromNCHWToNCHW4Float(src_data, dst_data, dims[0], dims[1], dims[2], dims[3]);
         }
     }
 
-    cpu_adapter_acc_->Forward(cpu_blob_in_, cpu_blob_out_);
+    status = cpu_adapter_acc_->Forward(cpu_blob_in_, cpu_blob_out_);
+    RETURN_ON_NEQ(status, TNN_OK);
 
     //convert data from cpu to opencl
     for(int i = 0; i < outputs.size(); ++i) {
